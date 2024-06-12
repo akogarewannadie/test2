@@ -17,13 +17,14 @@ func main() {
 
 	taskChan := make(chan Ttype, 10)
 
-	doneTasks := make(chan Ttype)
-	undoneTasks := make(chan error)
+	doneTasks := make(chan Ttype, 10)
+	undoneTasks := make(chan error, 10)
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 
 	taskCreator := func() {
+		defer close(taskChan)
 		end := time.Now().Add(10 * time.Second)
 		for time.Now().Before(end) {
 			ft := time.Now().Format(time.RFC3339)
@@ -33,7 +34,6 @@ func main() {
 			taskChan <- Ttype{cT: ft, id: int(time.Now().UnixNano())}
 			time.Sleep(100 * time.Millisecond)
 		}
-		close(taskChan)
 	}
 
 	taskWorker := func(t Ttype) Ttype {
@@ -54,7 +54,7 @@ func main() {
 		if t.taskRESULT == "task has been successful" {
 			doneTasks <- t
 		} else {
-			undoneTasks <- fmt.Errorf("task id %d time %s, error %s", t.id, t.cT, t.taskRESULT)
+			undoneTasks <- fmt.Errorf("Task id %d time %s, error %s", t.id, t.cT, t.taskRESULT)
 		}
 	}
 
@@ -79,12 +79,12 @@ func main() {
 			time.Sleep(3 * time.Second)
 			mu.Lock()
 			fmt.Println("Errors:")
-			for err := range undoneTasks {
-				fmt.Println(err)
+			for len(undoneTasks) > 0 {
+				fmt.Println(<-undoneTasks)
 			}
 			fmt.Println("Done tasks:")
-			for task := range doneTasks {
-				fmt.Println(task)
+			for len(doneTasks) > 0 {
+				fmt.Println(<-doneTasks)
 			}
 			mu.Unlock()
 		}
